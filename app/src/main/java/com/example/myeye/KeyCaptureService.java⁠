@@ -31,8 +31,7 @@ public class KeyCaptureService extends AccessibilityService {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         startForegroundServiceNotification();
-        // Tells Android to restart the service automatically if it gets killed
-        return START_STICKY;
+        return START_STICKY; // Keeps service running persistently
     }
 
     private void startForegroundServiceNotification() {
