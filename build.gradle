@@ -1,3 +1,11 @@
-plugins {
-    id 'com.android.application' version '8.1.1' apply false
+android {
+    namespace 'com.example.myeye'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.example.myeye"
+        minSdk 24
+        targetSdk 34
+        ...
+    }
 }
