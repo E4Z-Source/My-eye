@@ -1,26 +1,3 @@
 plugins {
-    id 'com.android.application'
-}
-
-android {
-    namespace 'com.example.myeye'
-    compileSdk 34
-
-    defaultConfig {
-        applicationId "com.example.myeye"
-        minSdk 24
-        targetSdk 34
-        versionCode 1
-        versionName "1.0"
-    }
-
-    buildTypes {
-        release {
-            minifyEnabled false
-        }
-    }
-}
-
-dependencies {
-    implementation 'androidx.core:core:1.12.0'
+    id 'com.android.application' version '8.2.0' apply false
 }
